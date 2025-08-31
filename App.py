@@ -68,14 +68,66 @@ class MediaTreeManager:
         THUMB_DIR.mkdir(parents=True, exist_ok=True)
         
         if not META_FILE.exists():
-            self.save_metadata({
-                'campaign': {
-                    'name': 'New Campaign',
-                    'objective': '',
-                    'created_at': datetime.datetime.now().isoformat()
+            self.save_metadata(self.get_default_metadata())
+
+    def get_default_metadata(self) -> Dict[str, Any]:
+        """Get default metadata structure with demo data"""
+        return {
+            'campaign': {
+                'name': 'Summer Product Launch',
+                'objective': 'Increase brand awareness and drive sales for our new summer collection',
+                'created_at': datetime.datetime.now().isoformat()
+            },
+            'ad_sets': {
+                'Social Media Ads': {
+                    'name': 'Social Media Ads',
+                    'description': 'Ads for Facebook, Instagram, and Twitter',
+                    'created_at': datetime.datetime.now().isoformat(),
+                    'ads': {
+                        'demo001': {
+                            'id': 'demo001',
+                            'name': 'Instagram Story Template',
+                            'description': 'Bright and engaging story template for product showcase',
+                            'tags': ['instagram', 'story', 'template', 'summer'],
+                            'url': 'https://example.com/campaign1',
+                            'schedule_date': None,
+                            'created_at': datetime.datetime.now().isoformat(),
+                            'file_path': '',
+                            'mime_type': 'image/jpeg'
+                        },
+                        'demo002': {
+                            'id': 'demo002', 
+                            'name': 'Product Demo Video',
+                            'description': 'Short video demonstrating key product features',
+                            'tags': ['video', 'demo', 'product', 'features'],
+                            'url': 'https://example.com/video',
+                            'schedule_date': None,
+                            'created_at': datetime.datetime.now().isoformat(),
+                            'file_path': '',
+                            'mime_type': 'video/mp4'
+                        }
+                    }
                 },
-                'ad_sets': {}
-            })
+                'Google Ads': {
+                    'name': 'Google Ads',
+                    'description': 'Search and display ads for Google Ads platform',
+                    'created_at': datetime.datetime.now().isoformat(),
+                    'ads': {
+                        'demo003': {
+                            'id': 'demo003',
+                            'name': 'Search Ad Creative',
+                            'description': 'Text and image combination for Google search results',
+                            'tags': ['google', 'search', 'text-ad'],
+                            'url': 'https://example.com/landing',
+                            'schedule_date': None,
+                            'created_at': datetime.datetime.now().isoformat(),
+                            'file_path': '',
+                            'mime_type': 'image/png'
+                        }
+                    }
+                }
+            }
+        }
 
     def load_metadata(self) -> Dict[str, Any]:
         """Load metadata from JSON file"""
@@ -83,14 +135,7 @@ class MediaTreeManager:
             with open(META_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            return {
-                'campaign': {
-                    'name': 'New Campaign',
-                    'objective': '',
-                    'created_at': datetime.datetime.now().isoformat()
-                },
-                'ad_sets': {}
-            }
+            return self.get_default_metadata()
 
     def save_metadata(self, metadata: Dict[str, Any]):
         """Save metadata to JSON file"""
@@ -103,7 +148,7 @@ class MediaTreeManager:
         return extension in ALL_ALLOWED
 
     def get_file_category(self, filename: str) -> str:
-        """Get file category (image, video, audio)"""
+        """Get file category (images, videos, audio)"""
         extension = filename.split('.')[-1].lower()
         for category, extensions in ALLOWED_EXTENSIONS.items():
             if extension in extensions:
@@ -154,6 +199,8 @@ class MediaTreeManager:
 
     def get_thumbnail_path(self, file_path: str) -> Optional[str]:
         """Get thumbnail path for a media file"""
+        if not file_path:
+            return None
         original_path = Path(file_path)
         thumb_path = THUMB_DIR / f"thumb_{original_path.name}"
         return str(thumb_path) if thumb_path.exists() else None
@@ -198,7 +245,7 @@ class MediaTreeManager:
         
         ad = metadata['ad_sets'][ad_set_name]['ads'][ad_id]
         
-        if delete_file and 'file_path' in ad:
+        if delete_file and 'file_path' in ad and ad['file_path']:
             try:
                 file_path = Path(ad['file_path'])
                 if file_path.exists():
@@ -257,7 +304,7 @@ class MediaTreeManager:
             stats['ads_by_set'][ad_set_name] = ad_count
             
             for ad in ad_set['ads'].values():
-                if 'file_path' in ad:
+                if 'file_path' in ad and ad['file_path']:
                     category = self.get_file_category(ad['file_path'])
                     if category in stats['ads_by_type']:
                         stats['ads_by_type'][category] += 1
@@ -296,18 +343,25 @@ class MediaTreeManager:
             for ad_id, ad in ad_set['ads'].items():
                 ad_node_id = f"ad_{ad_id}"
                 ad_name = ad.get('name', 'Untitled Ad')
-                file_category = self.get_file_category(ad.get('file_path', ''))
+                
+                # Determine file category for color coding
+                file_category = 'unknown'
+                if 'file_path' in ad and ad['file_path']:
+                    file_category = self.get_file_category(ad['file_path'])
                 
                 # Color based on media type
                 color_map = {
                     'images': '#2ca02c',
-                    'videos': '#d62728',
+                    'videos': '#d62728', 
                     'audio': '#9467bd',
                     'unknown': '#8c564b'
                 }
                 color = color_map.get(file_category, '#8c564b')
                 
-                dot.node(ad_node_id, ad_name, 
+                # Truncate long names for display
+                display_name = ad_name[:20] + '...' if len(ad_name) > 20 else ad_name
+                
+                dot.node(ad_node_id, display_name, 
                         fillcolor=color, fontcolor='white', shape='ellipse')
                 dot.edge(ad_set_id, ad_node_id)
         
@@ -325,7 +379,7 @@ class MediaTreeManager:
             # Add media files
             for ad_set_name, ad_set in metadata['ad_sets'].items():
                 for ad_id, ad in ad_set['ads'].items():
-                    if 'file_path' in ad:
+                    if 'file_path' in ad and ad['file_path']:
                         file_path = Path(ad['file_path'])
                         if file_path.exists():
                             # Organize in ZIP by ad set
@@ -334,6 +388,32 @@ class MediaTreeManager:
         
         buffer.seek(0)
         return buffer
+
+def render_media_preview(ad: Dict[str, Any], manager: MediaTreeManager, width: int = 150):
+    """Render media preview based on file type"""
+    if 'file_path' not in ad or not ad['file_path']:
+        st.write("📄 Demo Content (No file)")
+        return
+    
+    file_path = Path(ad['file_path'])
+    if not file_path.exists():
+        st.write("📄 Demo Content (File not found)")
+        return
+    
+    category = manager.get_file_category(ad['file_path'])
+    
+    if category == 'images':
+        thumb_path = manager.get_thumbnail_path(ad['file_path'])
+        if thumb_path:
+            st.image(thumb_path, width=width)
+        else:
+            st.image(ad['file_path'], width=width)
+    elif category == 'videos':
+        st.video(ad['file_path'])
+    elif category == 'audio':
+        st.audio(ad['file_path'])
+    else:
+        st.write(f"📄 {file_path.name}")
 
 def main():
     # Page configuration
@@ -380,7 +460,23 @@ def main():
         margin: 0.1rem;
         display: inline-block;
     }
+    .demo-banner {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        padding: 0.75rem;
+        border-radius: 5px;
+        margin-bottom: 1rem;
+        text-align: center;
+    }
     </style>
+    """, unsafe_allow_html=True)
+    
+    # Demo info banner
+    st.markdown("""
+    <div class="demo-banner">
+        🎯 <strong>Demo Mode Active</strong> - This app comes with sample campaign data. 
+        Upload your own media files to replace demo content!
+    </div>
     """, unsafe_allow_html=True)
     
     # Header
@@ -466,11 +562,12 @@ def main():
             # Tree legend
             st.markdown("""
             **Legend:**
-            - 🔵 Blue: Campaign
-            - 🟠 Orange: Ad Sets  
-            - 🟢 Green: Image Ads
-            - 🔴 Red: Video Ads
-            - 🟣 Purple: Audio Ads
+            - 🔵 **Blue**: Campaign Level
+            - 🟠 **Orange**: Ad Sets  
+            - 🟢 **Green**: Image Ads
+            - 🔴 **Red**: Video Ads
+            - 🟣 **Purple**: Audio Ads
+            - 🟤 **Brown**: Other File Types
             """)
         else:
             st.info("Create your first Ad Set to see the campaign tree!")
@@ -506,7 +603,7 @@ def main():
                         st.write(f"**Description:** {ad_set.get('description', 'No description')}")
                         st.write(f"**Created:** {ad_set.get('created_at', 'Unknown')[:10]}")
                     with col2:
-                        if st.button(f"📤 Upload to {ad_set_name}", key=f"upload_{ad_set_name}"):
+                        if st.button(f"📤 Upload Media", key=f"upload_{ad_set_name}"):
                             st.session_state[f"show_upload_{ad_set_name}"] = True
                     with col3:
                         if st.button(f"🗑️ Delete Set", key=f"delete_set_{ad_set_name}"):
@@ -546,7 +643,7 @@ def main():
                                                 'name': uploaded_file.name,
                                                 'file_path': file_path,
                                                 'mime_type': mime_type,
-                                                'description': '',
+                                                'description': f'Uploaded from {uploaded_file.name}',
                                                 'url': '',
                                                 'tags': [tag.strip() for tag in default_tags.split(',') if tag.strip()],
                                                 'schedule_date': None
@@ -564,6 +661,10 @@ def main():
                                         st.rerun()
                                 else:
                                     st.warning("Please select files to upload")
+                        
+                        if st.button("❌ Cancel Upload", key=f"cancel_{ad_set_name}"):
+                            st.session_state[f"show_upload_{ad_set_name}"] = False
+                            st.rerun()
                     
                     # Display ads in this set
                     if ad_set['ads']:
@@ -573,28 +674,11 @@ def main():
                             with st.container():
                                 st.markdown('<div class="ad-card">', unsafe_allow_html=True)
                                 
-                                col_media, col_info, col_actions = st.columns([1, 2, 1])
+                                col_media, col_info, col_actions = st.columns([1, 3, 1])
                                 
                                 # Media preview
                                 with col_media:
-                                    if 'file_path' in ad and Path(ad['file_path']).exists():
-                                        file_path = Path(ad['file_path'])
-                                        category = manager.get_file_category(ad['file_path'])
-                                        
-                                        if category == 'images':
-                                            thumb_path = manager.get_thumbnail_path(ad['file_path'])
-                                            if thumb_path:
-                                                st.image(thumb_path, width=150)
-                                            else:
-                                                st.image(ad['file_path'], width=150)
-                                        elif category == 'videos':
-                                            st.video(ad['file_path'])
-                                        elif category == 'audio':
-                                            st.audio(ad['file_path'])
-                                        else:
-                                            st.write(f"📄 {file_path.name}")
-                                    else:
-                                        st.write("❌ File not found")
+                                    render_media_preview(ad, manager, width=150)
                                 
                                 # Ad information
                                 with col_info:
@@ -602,14 +686,14 @@ def main():
                                     st.write(f"Description: {ad.get('description', 'No description')}")
                                     
                                     if ad.get('url'):
-                                        st.write(f"URL: {ad['url']}")
+                                        st.markdown(f"🔗 [Link]({ad['url']})")
                                     
                                     if ad.get('tags'):
                                         tags_html = ''.join([f'<span class="tag">{tag}</span>' for tag in ad['tags']])
                                         st.markdown(f"Tags: {tags_html}", unsafe_allow_html=True)
                                     
                                     if ad.get('schedule_date'):
-                                        st.write(f"Scheduled: {ad['schedule_date']}")
+                                        st.write(f"📅 Scheduled: {ad['schedule_date']}")
                                 
                                 # Actions
                                 with col_actions:
@@ -692,16 +776,7 @@ def main():
                         col1, col2, col3 = st.columns([1, 3, 1])
                         
                         with col1:
-                            if 'file_path' in ad and Path(ad['file_path']).exists():
-                                category = manager.get_file_category(ad['file_path'])
-                                if category == 'images':
-                                    thumb_path = manager.get_thumbnail_path(ad['file_path'])
-                                    if thumb_path:
-                                        st.image(thumb_path, width=120)
-                                    else:
-                                        st.image(ad['file_path'], width=120)
-                                elif category == 'videos':
-                                    st.video(ad['file_path'])
+                            render_media_preview(ad, manager, width=120)
                         
                         with col2:
                             st.write(f"**{ad.get('name', 'Untitled')}**")
@@ -747,124 +822,113 @@ def main():
                     ads_list = ads_list[start_idx:end_idx]
                 
                 # Display ads in grid
-                cols = st.columns(min(3, len(ads_list)))
-                for idx, (ad_id, ad) in enumerate(ads_list):
-                    with cols[idx % 3]:
-                        # Media preview
-                        if 'file_path' in ad and Path(ad['file_path']).exists():
-                            category = manager.get_file_category(ad['file_path'])
+                if ads_list:
+                    cols = st.columns(min(3, len(ads_list)))
+                    for idx, (ad_id, ad) in enumerate(ads_list):
+                        with cols[idx % 3]:
+                            # Media preview
+                            render_media_preview(ad, manager, width=200)
                             
-                            if category == 'images':
-                                thumb_path = manager.get_thumbnail_path(ad['file_path'])
-                                if thumb_path:
-                                    st.image(thumb_path, use_column_width=True)
-                                else:
-                                    st.image(ad['file_path'], use_column_width=True)
-                            elif category == 'videos':
-                                st.video(ad['file_path'])
-                            elif category == 'audio':
-                                st.audio(ad['file_path'])
-                            else:
-                                st.write(f"📄 {Path(ad['file_path']).name}")
-                        else:
-                            st.warning("❌ File not found")
-                        
-                        # Ad details
-                        st.write(f"**{ad.get('name', 'Untitled')}**")
-                        st.write(f"{ad.get('description', 'No description')[:50]}...")
-                        
-                        if ad.get('tags'):
-                            tags_display = ', '.join(ad['tags'][:3])
-                            if len(ad['tags']) > 3:
-                                tags_display += f" +{len(ad['tags']) - 3} more"
-                            st.caption(f"🏷️ {tags_display}")
+                            # Ad details
+                            st.write(f"**{ad.get('name', 'Untitled')}**")
+                            description = ad.get('description', 'No description')
+                            st.write(f"{description[:50]}{'...' if len(description) > 50 else ''}")
+                            
+                            if ad.get('tags'):
+                                tags_display = ', '.join(ad['tags'][:3])
+                                if len(ad['tags']) > 3:
+                                    tags_display += f" +{len(ad['tags']) - 3} more"
+                                st.caption(f"🏷️ {tags_display}")
 
-# --- Additional Features Section ---
-st.markdown("---")
-st.header("🛠️ Advanced Features")
+    # Advanced Features Section
+    st.markdown("---")
+    st.header("🛠️ Advanced Features")
 
-feature_col1, feature_col2, feature_col3 = st.columns(3)
+    feature_col1, feature_col2, feature_col3 = st.columns(3)
 
-with feature_col1:
-    st.subheader("📊 Analytics")
-    if metadata['ad_sets']:
-        # Create simple analytics chart
-        ad_set_data = []
-        for name, ad_set in metadata['ad_sets'].items():
-            ad_set_data.append({
-                'Ad Set': name,
-                'Ads Count': len(ad_set['ads']),
-                'Created': ad_set.get('created_at', '')[:10]
-            })
-        
-        if ad_set_data:
-            df = pd.DataFrame(ad_set_data)
-            st.dataframe(df, use_container_width=True)
+    with feature_col1:
+        st.subheader("📊 Analytics")
+        if metadata['ad_sets']:
+            # Create simple analytics chart
+            ad_set_data = []
+            for name, ad_set in metadata['ad_sets'].items():
+                ad_set_data.append({
+                    'Ad Set': name,
+                    'Ads Count': len(ad_set['ads']),
+                    'Created': ad_set.get('created_at', '')[:10]
+                })
             
-            # Simple bar chart
-            st.bar_chart(df.set_index('Ad Set')['Ads Count'])
+            if ad_set_data:
+                df = pd.DataFrame(ad_set_data)
+                st.dataframe(df, use_container_width=True)
+                
+                # Simple bar chart
+                if len(df) > 1:
+                    st.bar_chart(df.set_index('Ad Set')['Ads Count'])
 
-with feature_col2:
-    st.subheader("🔄 Bulk Operations")
-    
-    if metadata['ad_sets']:
-        bulk_ad_set = st.selectbox("Select Ad Set for bulk operations", 
-                                 list(metadata['ad_sets'].keys()),
-                                 key="bulk_ad_set")
+    with feature_col2:
+        st.subheader("🔄 Bulk Operations")
         
-        if st.button("🏷️ Bulk Add Tags"):
-            bulk_tags = st.text_input("Tags to add (comma-separated)", key="bulk_tags_input")
-            if bulk_tags:
-                tags_to_add = [tag.strip() for tag in bulk_tags.split(',') if tag.strip()]
+        if metadata['ad_sets']:
+            bulk_ad_set = st.selectbox("Select Ad Set for bulk operations", 
+                                     list(metadata['ad_sets'].keys()),
+                                     key="bulk_ad_set")
+            
+            bulk_tags_input = st.text_input("Tags to add (comma-separated)", key="bulk_tags_input")
+            if st.button("🏷️ Bulk Add Tags") and bulk_tags_input:
+                tags_to_add = [tag.strip() for tag in bulk_tags_input.split(',') if tag.strip()]
                 for ad_id, ad in metadata['ad_sets'][bulk_ad_set]['ads'].items():
                     existing_tags = set(ad.get('tags', []))
                     existing_tags.update(tags_to_add)
                     ad['tags'] = list(existing_tags)
                 manager.save_metadata(metadata)
                 st.success(f"Added tags to all ads in {bulk_ad_set}")
-
-with feature_col3:
-    st.subheader("💾 Backup & Restore")
-    
-    # Backup
-    if st.button("📦 Create Full Backup"):
-        backup_buffer = manager.export_campaign_zip(metadata)
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        st.download_button(
-            "⬇️ Download Backup",
-            data=backup_buffer.getvalue(),
-            file_name=f"campaign_backup_{timestamp}.zip",
-            mime="application/zip"
-        )
-    
-    # Import metadata
-    st.markdown("**📥 Import Metadata**")
-    uploaded_meta = st.file_uploader("Upload metadata JSON", type=['json'], key="import_meta")
-    if uploaded_meta and st.button("🔄 Import"):
-        try:
-            imported_data = json.load(uploaded_meta)
-            # Validate structure
-            if 'campaign' in imported_data and 'ad_sets' in imported_data:
-                manager.save_metadata(imported_data)
-                st.success("Metadata imported successfully!")
                 st.rerun()
-            else:
-                st.error("Invalid metadata format")
-        except Exception as e:
-            st.error(f"Import failed: {e}")
 
-# Footer
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: #666; padding: 1rem;">
-    <p>🎬 <strong>Media Tree Manager</strong> | Organize your campaign media with ease</p>
-    <p>💡 Tip: Use tags to categorize your ads for better organization</p>
-</div>
-""", unsafe_allow_html=True)
+    with feature_col3:
+        st.subheader("💾 Backup & Restore")
+        
+        # Backup
+        if st.button("📦 Create Full Backup"):
+            backup_buffer = manager.export_campaign_zip(metadata)
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            st.download_button(
+                "⬇️ Download Backup",
+                data=backup_buffer.getvalue(),
+                file_name=f"campaign_backup_{timestamp}.zip",
+                mime="application/zip"
+            )
+        
+        # Import metadata
+        st.markdown("**📥 Import Metadata**")
+        uploaded_meta = st.file_uploader("Upload metadata JSON", type=['json'], key="import_meta")
+        if uploaded_meta and st.button("🔄 Import"):
+            try:
+                imported_data = json.load(uploaded_meta)
+                # Validate structure
+                if 'campaign' in imported_data and 'ad_sets' in imported_data:
+                    manager.save_metadata(imported_data)
+                    st.success("Metadata imported successfully!")
+                    st.rerun()
+                else:
+                    st.error("Invalid metadata format")
+            except Exception as e:
+                st.error(f"Import failed: {e}")
 
-# Warning about dependencies
-if not PIL_AVAILABLE:
-    st.sidebar.warning("⚠️ Pillow not installed. Image thumbnails disabled. Install with: `pip install pillow`")
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #666; padding: 1rem;">
+        <p>🎬 <strong>Media Tree Manager</strong> | Organize your campaign media with ease</p>
+        <p>💡 <strong>Tips:</strong> Use tags to categorize ads • Upload multiple files at once • Export for backup</p>
+        <p>📁 Data stored in: <code>./media_tree_data/</code></p>
+    </div>
+    """, unsafe_allow_html=True)
 
+    # Warning about dependencies
+    if not PIL_AVAILABLE:
+        st.sidebar.warning("⚠️ Pillow not installed. Image thumbnails disabled. Install with: `pip install pillow`")
+
+# Run the application
 if __name__ == "__main__":
     main()
