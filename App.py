@@ -552,25 +552,409 @@ def main():
     main_tab1, main_tab2, main_tab3 = st.tabs(["🌳 Campaign Tree", "📁 Ad Sets Management", "🔍 Search & Browse"])
     
     with main_tab1:
-        st.subheader("Campaign Hierarchy Visualization")
+        st.subheader("🌳 Interactive Campaign Hierarchy")
         
         if metadata['ad_sets']:
-            # Generate and display tree
-            tree_diagram = manager.generate_tree_diagram(metadata)
-            st.graphviz_chart(tree_diagram.source, use_container_width=True)
+            # Control buttons row
+            col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
             
-            # Tree legend
-            st.markdown("""
-            **Legend:**
-            - 🔵 **Blue**: Campaign Level
-            - 🟠 **Orange**: Ad Sets  
-            - 🟢 **Green**: Image Ads
-            - 🔴 **Red**: Video Ads
-            - 🟣 **Purple**: Audio Ads
-            - 🟤 **Brown**: Other File Types
-            """)
+            with col_btn1:
+                if st.button("📊 Campaign Overview", use_container_width=True):
+                    st.session_state['view_mode'] = 'overview'
+            with col_btn2:
+                if st.button("🌳 Tree Diagram", use_container_width=True):
+                    st.session_state['view_mode'] = 'tree'
+            with col_btn3:
+                if st.button("📈 Analytics View", use_container_width=True):
+                    st.session_state['view_mode'] = 'analytics'
+            with col_btn4:
+                if st.button("📋 CSV Export/Import", use_container_width=True):
+                    st.session_state['view_mode'] = 'csv'
+            
+            # Set default view mode
+            if 'view_mode' not in st.session_state:
+                st.session_state['view_mode'] = 'tree'
+            
+            st.markdown("---")
+            
+            # Campaign Overview Mode
+            if st.session_state['view_mode'] == 'overview':
+                st.markdown("### 📊 Campaign Overview")
+                
+                # Campaign summary card
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                           padding: 2rem; border-radius: 15px; color: white; margin-bottom: 2rem;">
+                    <h2>🎯 {metadata['campaign']['name']}</h2>
+                    <p style="font-size: 1.1em; margin: 1rem 0;">
+                        <strong>Objective:</strong> {metadata['campaign']['objective']}
+                    </p>
+                    <div style="display: flex; gap: 2rem; margin-top: 1rem;">
+                        <div><strong>{len(metadata['ad_sets'])}</strong> Ad Sets</div>
+                        <div><strong>{sum(len(ad_set['ads']) for ad_set in metadata['ad_sets'].values())}</strong> Total Ads</div>
+                        <div><strong>Created:</strong> {metadata['campaign']['created_at'][:10]}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Quick navigation buttons to ad sets
+                st.markdown("### 🚀 Quick Actions")
+                nav_cols = st.columns(min(4, len(metadata['ad_sets'])))
+                for idx, (ad_set_name, ad_set) in enumerate(metadata['ad_sets'].items()):
+                    with nav_cols[idx % 4]:
+                        if st.button(f"📂 Go to\n{ad_set_name}\n({len(ad_set['ads'])} ads)", 
+                                   key=f"nav_{ad_set_name}", use_container_width=True):
+                            st.session_state['selected_ad_set'] = ad_set_name
+                            st.switch_page("Ad Sets Management")
+            
+            # Tree Diagram Mode
+            elif st.session_state['view_mode'] == 'tree':
+                st.markdown("### 🌳 Interactive Tree Diagram")
+                
+                # Generate and display tree
+                tree_diagram = manager.generate_tree_diagram(metadata)
+                st.graphviz_chart(tree_diagram.source, use_container_width=True)
+                
+                # Interactive node selection
+                st.markdown("### 🎯 Navigate to Specific Elements")
+                nav_col1, nav_col2 = st.columns(2)
+                
+                with nav_col1:
+                    st.markdown("**Jump to Ad Set:**")
+                    selected_ad_set = st.selectbox(
+                        "Choose Ad Set to manage",
+                        options=list(metadata['ad_sets'].keys()),
+                        key="tree_nav_adset"
+                    )
+                    if st.button(f"🚀 Manage '{selected_ad_set}'", use_container_width=True):
+                        st.session_state['selected_ad_set'] = selected_ad_set
+                        st.info(f"Navigate to 'Ad Sets Management' tab to manage {selected_ad_set}")
+                
+                with nav_col2:
+                    st.markdown("**Tree Legend:**")
+                    st.markdown("""
+                    - 🔵 **Blue**: Campaign Level
+                    - 🟠 **Orange**: Ad Sets  
+                    - 🟢 **Green**: Image Ads
+                    - 🔴 **Red**: Video Ads
+                    - 🟣 **Purple**: Audio Ads
+                    - 🟤 **Brown**: Other File Types
+                    """)
+            
+            # Analytics Mode
+            elif st.session_state['view_mode'] == 'analytics':
+                st.markdown("### 📈 Campaign Analytics Dashboard")
+                
+                # Key metrics
+                total_ads = sum(len(ad_set['ads']) for ad_set in metadata['ad_sets'].values())
+                
+                metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                with metric_col1:
+                    st.metric("📂 Ad Sets", len(metadata['ad_sets']))
+                with metric_col2:
+                    st.metric("🎬 Total Ads", total_ads)
+                with metric_col3:
+                    avg_ads = total_ads / len(metadata['ad_sets']) if metadata['ad_sets'] else 0
+                    st.metric("📊 Avg Ads/Set", f"{avg_ads:.1f}")
+                with metric_col4:
+                    # Count unique tags
+                    all_tags = set()
+                    for ad_set in metadata['ad_sets'].values():
+                        for ad in ad_set['ads'].values():
+                            all_tags.update(ad.get('tags', []))
+                    st.metric("🏷️ Unique Tags", len(all_tags))
+                
+                # Detailed breakdown
+                if total_ads > 0:
+                    # Ad Sets breakdown
+                    st.markdown("#### 📊 Ads per Ad Set")
+                    ad_set_data = []
+                    for name, ad_set in metadata['ad_sets'].items():
+                        ad_set_data.append({
+                            'Ad Set': name,
+                            'Total Ads': len(ad_set['ads']),
+                            'Created Date': ad_set.get('created_at', '')[:10]
+                        })
+                    
+                    df_adsets = pd.DataFrame(ad_set_data)
+                    col_chart, col_table = st.columns([2, 1])
+                    with col_chart:
+                        st.bar_chart(df_adsets.set_index('Ad Set')['Total Ads'])
+                    with col_table:
+                        st.dataframe(df_adsets, use_container_width=True)
+                    
+                    # Media type analysis
+                    st.markdown("#### 🎨 Media Type Distribution")
+                    stats = manager.get_statistics(metadata)
+                    
+                    type_data = []
+                    for media_type, count in stats['ads_by_type'].items():
+                        if count > 0:
+                            type_data.append({'Type': media_type.title(), 'Count': count})
+                    
+                    if type_data:
+                        df_types = pd.DataFrame(type_data)
+                        col_pie, col_bar = st.columns(2)
+                        with col_pie:
+                            st.bar_chart(df_types.set_index('Type')['Count'])
+                        with col_bar:
+                            st.dataframe(df_types, use_container_width=True)
+                    
+                    # Tag cloud
+                    st.markdown("#### 🏷️ Popular Tags")
+                    tag_counts = {}
+                    for ad_set in metadata['ad_sets'].values():
+                        for ad in ad_set['ads'].values():
+                            for tag in ad.get('tags', []):
+                                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                    
+                    if tag_counts:
+                        # Sort tags by frequency
+                        sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+                        tag_df = pd.DataFrame(sorted_tags, columns=['Tag', 'Usage Count'])
+                        st.dataframe(tag_df, use_container_width=True)
+            
+            # CSV Export/Import Mode
+            elif st.session_state['view_mode'] == 'csv':
+                st.markdown("### 📋 CSV Data Management")
+                
+                # Export section
+                st.markdown("#### 📤 Export Data")
+                export_col1, export_col2 = st.columns(2)
+                
+                with export_col1:
+                    st.markdown("**📊 Export Campaign Data as CSV**")
+                    
+                    # Generate comprehensive CSV data
+                    csv_data = []
+                    for ad_set_name, ad_set in metadata['ad_sets'].items():
+                        for ad_id, ad in ad_set['ads'].items():
+                            csv_data.append({
+                                'campaign_name': metadata['campaign']['name'],
+                                'campaign_objective': metadata['campaign']['objective'],
+                                'ad_set_name': ad_set_name,
+                                'ad_set_description': ad_set.get('description', ''),
+                                'ad_id': ad_id,
+                                'ad_name': ad.get('name', ''),
+                                'ad_description': ad.get('description', ''),
+                                'ad_url': ad.get('url', ''),
+                                'ad_tags': '|'.join(ad.get('tags', [])),
+                                'schedule_date': ad.get('schedule_date', ''),
+                                'file_path': ad.get('file_path', ''),
+                                'mime_type': ad.get('mime_type', ''),
+                                'created_at': ad.get('created_at', ''),
+                                'ad_set_created': ad_set.get('created_at', ''),
+                                'campaign_created': metadata['campaign'].get('created_at', '')
+                            })
+                    
+                    if csv_data:
+                        df_export = pd.DataFrame(csv_data)
+                        
+                        # Preview
+                        st.markdown("**Preview (first 5 rows):**")
+                        st.dataframe(df_export.head(), use_container_width=True)
+                        
+                        # Download button
+                        csv_string = df_export.to_csv(index=False)
+                        st.download_button(
+                            "⬇️ Download Complete Campaign CSV",
+                            data=csv_string,
+                            file_name=f"campaign_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("No data to export. Add some ads first!")
+                
+                with export_col2:
+                    st.markdown("**📋 Export Ad Sets Summary**")
+                    
+                    # Ad sets summary CSV
+                    summary_data = []
+                    for ad_set_name, ad_set in metadata['ad_sets'].items():
+                        ads = ad_set['ads']
+                        summary_data.append({
+                            'ad_set_name': ad_set_name,
+                            'description': ad_set.get('description', ''),
+                            'total_ads': len(ads),
+                            'images_count': sum(1 for ad in ads.values() 
+                                              if manager.get_file_category(ad.get('file_path', '')) == 'images'),
+                            'videos_count': sum(1 for ad in ads.values() 
+                                              if manager.get_file_category(ad.get('file_path', '')) == 'videos'),
+                            'audio_count': sum(1 for ad in ads.values() 
+                                             if manager.get_file_category(ad.get('file_path', '')) == 'audio'),
+                            'unique_tags': len(set(tag for ad in ads.values() for tag in ad.get('tags', []))),
+                            'created_at': ad_set.get('created_at', '')
+                        })
+                    
+                    if summary_data:
+                        df_summary = pd.DataFrame(summary_data)
+                        st.dataframe(df_summary, use_container_width=True)
+                        
+                        summary_csv = df_summary.to_csv(index=False)
+                        st.download_button(
+                            "⬇️ Download Ad Sets Summary CSV",
+                            data=summary_csv,
+                            file_name=f"adsets_summary_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                
+                # Import section
+                st.markdown("---")
+                st.markdown("#### 📥 Import Data from CSV")
+                
+                import_col1, import_col2 = st.columns(2)
+                
+                with import_col1:
+                    st.markdown("**📊 Import Complete Campaign CSV**")
+                    uploaded_csv = st.file_uploader(
+                        "Upload campaign CSV file", 
+                        type=['csv'], 
+                        key="import_campaign_csv"
+                    )
+                    
+                    if uploaded_csv:
+                        try:
+                            df_import = pd.read_csv(uploaded_csv)
+                            
+                            # Validate required columns
+                            required_cols = ['campaign_name', 'ad_set_name', 'ad_name']
+                            missing_cols = [col for col in required_cols if col not in df_import.columns]
+                            
+                            if missing_cols:
+                                st.error(f"Missing required columns: {', '.join(missing_cols)}")
+                            else:
+                                st.success(f"✅ Valid CSV file! Found {len(df_import)} rows")
+                                
+                                # Preview import data
+                                st.markdown("**Preview import data:**")
+                                st.dataframe(df_import.head(), use_container_width=True)
+                                
+                                col_import_opts = st.columns(2)
+                                with col_import_opts[0]:
+                                    merge_mode = st.radio(
+                                        "Import mode:",
+                                        ["Merge with existing", "Replace all data"],
+                                        key="import_mode"
+                                    )
+                                with col_import_opts[1]:
+                                    if st.button("🚀 Import CSV Data", type="primary"):
+                                        try:
+                                            if merge_mode == "Replace all data":
+                                                # Clear existing data
+                                                metadata['ad_sets'] = {}
+                                            
+                                            # Process CSV data
+                                            imported_count = 0
+                                            for _, row in df_import.iterrows():
+                                                # Update campaign info if provided
+                                                if pd.notna(row.get('campaign_name')):
+                                                    metadata['campaign']['name'] = str(row['campaign_name'])
+                                                if pd.notna(row.get('campaign_objective')):
+                                                    metadata['campaign']['objective'] = str(row['campaign_objective'])
+                                                
+                                                # Create ad set if doesn't exist
+                                                ad_set_name = str(row['ad_set_name'])
+                                                if ad_set_name not in metadata['ad_sets']:
+                                                    metadata['ad_sets'][ad_set_name] = {
+                                                        'name': ad_set_name,
+                                                        'description': str(row.get('ad_set_description', '')),
+                                                        'created_at': datetime.datetime.now().isoformat(),
+                                                        'ads': {}
+                                                    }
+                                                
+                                                # Create ad
+                                                ad_data = {
+                                                    'name': str(row.get('ad_name', 'Imported Ad')),
+                                                    'description': str(row.get('ad_description', '')),
+                                                    'url': str(row.get('ad_url', '')),
+                                                    'tags': [tag.strip() for tag in str(row.get('ad_tags', '')).split('|') if tag.strip()],
+                                                    'schedule_date': str(row.get('schedule_date', '')) if pd.notna(row.get('schedule_date')) else None,
+                                                    'file_path': str(row.get('file_path', '')),
+                                                    'mime_type': str(row.get('mime_type', ''))
+                                                }
+                                                
+                                                manager.create_ad(metadata, ad_set_name, ad_data)
+                                                imported_count += 1
+                                            
+                                            st.success(f"Successfully imported {imported_count} ads!")
+                                            st.rerun()
+                                            
+                                        except Exception as e:
+                                            st.error(f"Import failed: {e}")
+                        
+                        except Exception as e:
+                            st.error(f"Could not read CSV file: {e}")
+                
+                with import_col2:
+                    st.markdown("**📋 CSV Format Requirements**")
+                    st.markdown("""
+                    **Required columns:**
+                    - `campaign_name`: Campaign name
+                    - `ad_set_name`: Ad Set name  
+                    - `ad_name`: Ad name
+                    
+                    **Optional columns:**
+                    - `campaign_objective`: Campaign objective
+                    - `ad_set_description`: Ad Set description
+                    - `ad_description`: Ad description
+                    - `ad_url`: Ad URL
+                    - `ad_tags`: Tags (separated by |)
+                    - `schedule_date`: Schedule date (YYYY-MM-DD)
+                    - `file_path`: File path
+                    - `mime_type`: MIME type
+                    """)
+                    
+                    # Download template
+                    template_data = [{
+                        'campaign_name': 'Sample Campaign',
+                        'campaign_objective': 'Sample objective',
+                        'ad_set_name': 'Sample Ad Set',
+                        'ad_set_description': 'Sample description',
+                        'ad_name': 'Sample Ad',
+                        'ad_description': 'Sample ad description',
+                        'ad_url': 'https://example.com',
+                        'ad_tags': 'tag1|tag2|tag3',
+                        'schedule_date': '2025-09-01',
+                        'file_path': '',
+                        'mime_type': 'image/jpeg'
+                    }]
+                    
+                    template_df = pd.DataFrame(template_data)
+                    template_csv = template_df.to_csv(index=False)
+                    
+                    st.download_button(
+                        "📄 Download CSV Template",
+                        data=template_csv,
+                        file_name="campaign_import_template.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            
         else:
-            st.info("Create your first Ad Set to see the campaign tree!")
+            st.info("🌱 Create your first Ad Set to see the interactive campaign tree!")
+            
+            # Quick start buttons
+            st.markdown("### 🚀 Quick Start")
+            quick_col1, quick_col2 = st.columns(2)
+            
+            with quick_col1:
+                if st.button("➕ Create Sample Ad Set", use_container_width=True):
+                    try:
+                        manager.create_ad_set(metadata, "My First Ad Set", "Getting started with campaign management")
+                        st.success("Sample Ad Set created!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+            
+            with quick_col2:
+                if st.button("📥 Import Demo Data", use_container_width=True):
+                    # Reset to demo data
+                    demo_metadata = manager.get_default_metadata()
+                    manager.save_metadata(demo_metadata)
+                    st.success("Demo data loaded!")
+                    st.rerun()
     
     with main_tab2:
         st.subheader("Ad Sets & Media Management")
